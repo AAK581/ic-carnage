@@ -2,6 +2,7 @@
   "canisters": {
     "ic-carnage-backend": {
       "candid": "src/ic-carnage-backend/ic-carnage-backend.did",
+      "main": "src/ic-carnage-backend/src/lib.rs",
       "package": "ic-carnage-backend",
       "type": "rust"
     },
