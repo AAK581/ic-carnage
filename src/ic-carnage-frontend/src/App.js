@@ -19,7 +19,7 @@ class App {
     try {
       this.cars = await ic_carnage_backend.get_available_cars();
     } catch (error) {
-      console.error('Failed to load cars:', error);
+      console.error('Failed to load cars: ', error);
     }
   }
 
