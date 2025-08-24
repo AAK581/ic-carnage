@@ -1,0 +1,5 @@
+service : {
+    "deposit_currency" : (nat64) -> ();
+    "get_balance" : () -> (nat64) query;
+    "reset_balance" : () -> ();
+}

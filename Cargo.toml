@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "src/ic_carnage_backend"
+]
+resolver = "2"

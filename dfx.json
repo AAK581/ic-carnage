@@ -1,0 +1,41 @@
+{
+  "canisters": {
+    "ic_carnage_backend": {
+      "candid": "src/ic_carnage_backend/ic_carnage_backend.did",
+      "package": "ic_carnage_backend",
+      "type": "rust"
+    },
+    "ic_carnage_frontend": {
+      "dependencies": [
+        "ic_carnage_backend"
+      ],
+      "frontend" : {
+        "entrypoint": "src/ic_carnage_frontend/assets/index.html",
+        "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src *; worker-src 'self' blob:;"
+      },
+      "source": [
+        "src/ic_carnage_frontend/assets"
+      ],
+      "type": "assets"
+    },
+    "internet_identity": {
+      "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+      "frontend": {},
+      "remote": {
+        "id": {
+          "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        }
+      },
+      "type": "custom",
+      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}

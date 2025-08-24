@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Unity Web Player | IC Carnage</title>
+    <link rel="shortcut icon" href="TemplateData/favicon.ico">
+    <link rel="stylesheet" href="TemplateData/style.css">
+    <script>
+      // Global variables
+      let authClient = null;
+      let isAuthenticated = false;
+      let userPrincipal = null;
+      let icAgent = null;
+
+      // Preload script to fix BigInt conversion issue
+      (function() {
+        console.log("Applying BigInt patch...");
+        const originalPow = Math.pow;
+        Math.pow = function(base, exp) {
+          if (typeof base === 'bigint' || typeof exp === 'bigint') {
+            const safeBase = Number(base);
+            const safeExp = Number(exp);
+            if (isFinite(safeBase) && isFinite(safeExp) && safeBase <= Number.MAX_SAFE_INTEGER && safeExp <= Number.MAX_SAFE_INTEGER) {
+              return BigInt(originalPow(safeBase, safeExp));
+            }
+            return base ** exp; // BigInt exponentiation
+          }
+          return originalPow(base, exp);
+        };
+      })();
+
+      // Initialize authentication when auth-client loads
+      async function initializeAuth() {
+        console.log("Initializing authentication...");
+        try {
+          if (typeof AuthClient === 'undefined' || !AuthClient.create) {
+            throw new Error("AuthClient not properly loaded");
+          }
+
+          authClient = await AuthClient.create();
+          console.log("AuthClient created successfully");
+
+          // Check if already authenticated
+          if (await authClient.isAuthenticated()) {
+            console.log("Already authenticated, setting up identity...");
+            await handleAuthenticated();
+          } else {
+            console.log("Not authenticated, waiting for login...");
+            // Auto-login for testing - remove this in production
+            setTimeout(() => {
+              if (!isAuthenticated) {
+                console.log("Auto-starting login process...");
+                authenticate();
+              }
+            }, 2000);
+          }
+        } catch (error) {
+          console.error("Failed to initialize auth:", error);
+        }
+      }
+
+      // Handle successful authentication
+      async function handleAuthenticated() {
+        try {
+          const identity = authClient.getIdentity();
+          userPrincipal = identity.getPrincipal().toString();
+          
+          // Create agent with the authenticated identity - DISABLE VERIFICATION FOR LOCAL DEV
+          icAgent = new HttpAgent({ 
+            identity,
+            host: 'http://localhost:4943',
+            // This is the key setting for local development
+            verifyQuerySignatures: false
+          });
+
+          // CRITICAL: Fetch root key for local development
+          try {
+            await icAgent.fetchRootKey();
+            console.log("Root key fetched successfully for local development");
+          } catch (error) {
+            console.warn("Failed to fetch root key, but continuing:", error);
+          }
+
+          isAuthenticated = true;
+          console.log("Authentication successful! Principal:", userPrincipal);
+
+          // Notify Unity if it's loaded
+          if (window.unityInstance) {
+            console.log("Notifying Unity of successful authentication...");
+            window.unityInstance.SendMessage("PlayerCurrency", "OnAuthenticated");
+            
+            // Enable game interaction
+            window.unityInstance.SendMessage("PlayerCurrency", "EnableGameplay");
+          }
+
+          // Store for global access
+          window.icAgent = icAgent;
+          window.userPrincipal = userPrincipal;
+          
+        } catch (error) {
+          console.error("Error handling authentication:", error);
+        }
+      }
+
+      // Start authentication process
+      async function authenticate() {
+        if (!authClient) {
+          console.error("AuthClient not initialized");
+          return;
+        }
+
+        console.log("Starting Internet Identity login...");
+        try {
+          await authClient.login({
+            // Use the correct II canister ID from your dfx.json
+            identityProvider: window.location.hostname === 'localhost' 
+              ? `http://localhost:4943/?canisterId=${getIICanisterId()}`
+              : "https://identity.ic0.app",
+            onSuccess: async () => {
+              console.log("Login successful!");
+              await handleAuthenticated();
+            },
+            onError: (error) => {
+              console.error("Login failed:", error);
+              alert("Authentication failed: " + error.message);
+            },
+            windowOpenerFeatures: 'width=500,height=600,left=100,top=100'
+          });
+        } catch (error) {
+          console.error("Authentication process failed:", error);
+          alert("Authentication failed. Check console for details: " + error.message);
+        }
+      }
+
+      // Get II canister ID from the environment or use default
+      function getIICanisterId() {
+        // This should match your dfx.json II canister setup
+        // You might need to adjust this based on your local setup
+        return "rdmx6-jaaaa-aaaaa-aaadq-cai"; // Default II canister for local
+      }
+
+      // Unity will call these JavaScript functions
+      
+      // Get your backend canister ID
+      function getBackendCanisterId() {
+        // Replace with your actual canister ID
+        return "uxrrr-q7777-77774-qaaaq-cai";
+      }
+
+      // Create the Candid interface for your backend
+      const backendIdl = ({ IDL }) => {
+        return IDL.Service({
+          'deposit_currency': IDL.Func([IDL.Nat64], [], ['call']),
+          'get_balance': IDL.Func([], [IDL.Nat64], ['query']),
+          'reset_balance': IDL.Func([], [], ['call']),
+        });
+      };
+
+      // Function to get balance from ICP backend
+      window.GetBalanceJS = async function() {
+        console.log("GetBalanceJS called from Unity");
+        if (!isAuthenticated || !icAgent) {
+          console.error("Not authenticated, cannot get balance");
+          if (window.unityInstance) {
+            window.unityInstance.SendMessage("PlayerCurrency", "OnBalanceReceived", 0);
+          }
+          return;
+        }
+
+        try {
+          console.log("Creating actor for backend calls...");
+          console.log("Agent config:", {
+            host: icAgent._host,
+            verifyQuerySignatures: icAgent._verifyQuerySignatures
+          });
+          
+          // Create actor to call your backend
+          const actor = Actor.createActor(backendIdl, {
+            agent: icAgent,
+            canisterId: getBackendCanisterId(),
+          });
+          
+          console.log("Calling get_balance on backend...");
+          const balance = await actor.get_balance();
+          const balanceNumber = Number(balance);
+          
+          console.log("Balance retrieved from ICP:", balanceNumber);
+          
+          if (window.unityInstance) {
+            window.unityInstance.SendMessage("PlayerCurrency", "OnBalanceReceived", balanceNumber);
+          }
+          
+        } catch (error) {
+          console.error("Failed to get balance from ICP:", error);
+          console.error("Error details:", error.message);
+          console.error("Error stack:", error.stack);
+          
+          if (window.unityInstance) {
+            window.unityInstance.SendMessage("PlayerCurrency", "OnBalanceReceived", 0);
+          }
+        }
+      };
+
+      // Function to update balance on ICP backend
+      window.UpdateBalanceJS = async function(amount) {
+        console.log("UpdateBalanceJS called from Unity with amount:", amount);
+        if (!isAuthenticated || !icAgent) {
+          console.error("Not authenticated, cannot update balance");
+          return;
+        }
+
+        try {
+          // Create actor to call your backend
+          const actor = Actor.createActor(backendIdl, {
+            agent: icAgent,
+            canisterId: getBackendCanisterId(),
+          });
+          
+          console.log("Calling deposit_currency on backend with amount:", amount);
+          await actor.deposit_currency(BigInt(Math.max(0, amount))); // Ensure non-negative
+          console.log("Balance updated successfully on ICP");
+          
+          // After updating, get the new balance
+          setTimeout(() => {
+            if (window.GetBalanceJS) {
+              window.GetBalanceJS();
+            }
+          }, 500);
+          
+        } catch (error) {
+          console.error("Failed to update balance on ICP:", error);
+        }
+      };
+
+      // Manual login trigger (for testing)
+      window.triggerLogin = function() {
+        console.log("Manual login triggered");
+        authenticate();
+      };
+
+      // Manual logout function
+      window.logout = async function() {
+        if (authClient && isAuthenticated) {
+          await authClient.logout();
+          isAuthenticated = false;
+          userPrincipal = null;
+          icAgent = null;
+          console.log("Logged out successfully");
+        }
+      };
+
+      // Test function to bypass authentication for local development
+      window.testDirectCall = async function() {
+        console.log("Testing direct call without authentication...");
+        
+        try {
+          // Create anonymous agent for testing
+          const testAgent = new HttpAgent({
+            host: 'http://localhost:4943'
+          });
+          
+          await testAgent.fetchRootKey();
+          
+          const actor = Actor.createActor(backendIdl, {
+            agent: testAgent,
+            canisterId: getBackendCanisterId(),
+          });
+          
+          console.log("Calling get_balance with anonymous agent...");
+          const balance = await actor.get_balance();
+          console.log("Anonymous balance call result:", Number(balance));
+          
+        } catch (error) {
+          console.error("Anonymous call failed:", error);
+        }
+      };
+
+      // Reset balance function for testing
+      window.resetBalance = async function() {
+        console.log("Resetting balance...");
+        if (!isAuthenticated || !icAgent) {
+          console.error("Not authenticated, cannot reset balance");
+          return;
+        }
+
+        try {
+          const actor = Actor.createActor(backendIdl, {
+            agent: icAgent,
+            canisterId: getBackendCanisterId(),
+          });
+          
+          await actor.reset_balance();
+          console.log("Balance reset successfully");
+          
+          // Get updated balance
+          setTimeout(() => {
+            if (window.GetBalanceJS) {
+              window.GetBalanceJS();
+            }
+          }, 500);
+          
+        } catch (error) {
+          console.error("Failed to reset balance:", error);
+        }
+      };
+
+      // Load the bundled auth client
+      function loadAuthClient() {
+        console.log("Loading auth-client.bundle.js...");
+        
+        const script = document.createElement('script');
+        script.src = 'auth-client.bundle.js';
+        script.onload = function() {
+          console.log("Auth client loaded successfully");
+          
+          // Check if we have all required globals from the bundle
+          if (typeof AuthClient === 'undefined') {
+            console.error("AuthClient not found in bundle");
+            alert("AuthClient not properly bundled. Please recreate the bundle.");
+            return;
+          }
+          
+          if (typeof HttpAgent === 'undefined') {
+            console.error("HttpAgent not found in bundle");
+            alert("HttpAgent not properly bundled. You need to update your bundle command.");
+            return;
+          }
+          
+          if (typeof Actor === 'undefined') {
+            console.error("Actor not found in bundle");
+            alert("Actor not properly bundled. You need to update your bundle command.");
+            return;
+          }
+          
+          // Wait a moment for everything to initialize
+          setTimeout(initializeAuth, 100);
+        };
+        script.onerror = function() {
+          console.error("Failed to load auth-client.bundle.js");
+          alert("Authentication library failed to load. Check that auth-client.bundle.js exists.");
+        };
+        document.head.appendChild(script);
+      }
+
+      // Start loading when page loads
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', loadAuthClient);
+      } else {
+        loadAuthClient();
+      }
+    </script>
+  </head>
+  <body>
+    <div id="unity-container" class="unity-desktop">
+      <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
+      <div id="unity-loading-bar">
+        <div id="unity-logo"></div>
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+      <div id="unity-warning"> </div>
+      <div id="unity-footer">
+        <div id="unity-logo-title-footer"></div>
+        <div id="unity-fullscreen-button"></div>
+        <div id="unity-build-title">IC Carnage</div>
+        <!-- Add some debug buttons for testing -->
+        <div style="margin-top: 10px;">
+          <button onclick="triggerLogin()" style="margin: 5px;">Login</button>
+          <button onclick="logout()" style="margin: 5px;">Logout</button>
+          <button onclick="GetBalanceJS()" style="margin: 5px;">Get Balance</button>
+          <button onclick="UpdateBalanceJS(100)" style="margin: 5px;">Add 100 Currency</button>
+          <button onclick="testDirectCall()" style="margin: 5px;">Test Direct Call</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      var canvas = document.querySelector("#unity-canvas");
+
+      function unityShowBanner(msg, type) {
+        var warningBanner = document.querySelector("#unity-warning");
+        function updateBannerVisibility() {
+          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
+        }
+        var div = document.createElement('div');
+        div.innerHTML = msg;
+        warningBanner.appendChild(div);
+        if (type == 'error') div.style = 'background: red; padding: 10px;';
+        else {
+          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+          setTimeout(function() {
+            warningBanner.removeChild(div);
+            updateBannerVisibility();
+          }, 5000);
+        }
+        updateBannerVisibility();
+      }
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/web_0_9.loader.js";
+      var config = {
+        dataUrl: buildUrl + "/web_0_9.data.unityweb",
+        frameworkUrl: buildUrl + "/web_0_9.framework.js.unityweb",
+        codeUrl: buildUrl + "/web_0_9.wasm.unityweb",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "doma581",
+        productName: "IC Carnage",
+        productVersion: "3.0",
+        showBanner: unityShowBanner,
+      };
+
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        var meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
+        document.getElementsByTagName('head')[0].appendChild(meta);
+        document.querySelector("#unity-container").className = "unity-mobile";
+        canvas.className = "unity-mobile";
+      } else {
+        canvas.style.width = "960px";
+        canvas.style.height = "600px";
+      }
+
+      document.querySelector("#unity-loading-bar").style.display = "block";
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = () => {
+        createUnityInstance(canvas, config, (progress) => {
+          document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
+        }).then((unityInstance) => {
+          document.querySelector("#unity-loading-bar").style.display = "none";
+          document.querySelector("#unity-fullscreen-button").onclick = () => {
+            unityInstance.SetFullscreen(1);
+          };
+          
+          window.unityInstance = unityInstance;
+          console.log("Unity instance loaded and available globally");
+
+          // Initially disable gameplay until authenticated
+          console.log("Disabling gameplay until authentication...");
+          unityInstance.SendMessage("PlayerCurrency", "DisableGameplay");
+
+          // If already authenticated, enable the game and notify Unity
+          if (isAuthenticated) {
+            console.log("Already authenticated, enabling gameplay and notifying Unity...");
+            unityInstance.SendMessage("PlayerCurrency", "OnAuthenticated");
+            unityInstance.SendMessage("PlayerCurrency", "EnableGameplay");
+          }
+          
+        }).catch((message) => {
+          console.error("Unity load error:", message);
+          unityShowBanner("Unity failed to load: " + message, "error");
+        });
+      };
+      document.body.appendChild(script);
+    </script>
+  </body>
+</html>
