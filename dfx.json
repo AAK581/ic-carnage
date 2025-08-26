@@ -11,7 +11,7 @@
       ],
       "frontend" : {
         "entrypoint": "src/ic_carnage_frontend/assets/index.html",
-        "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src *; worker-src 'self' blob:;"
+        "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://127.0.0.1:4943 http://localhost:4943 https://ic0.app https://icp-api.io ws://127.0.0.1:4943 ws://localhost:4943; worker-src 'self' blob:;"
       },
       "source": [
         "src/ic_carnage_frontend/assets"
@@ -19,15 +19,20 @@
       "type": "assets"
     },
     "internet_identity": {
+      "type": "custom",
       "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
-      "frontend": {},
+      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz",
       "remote": {
         "id": {
           "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
         }
-      },
-      "type": "custom",
-      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
+      }
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
     }
   },
   "defaults": {
