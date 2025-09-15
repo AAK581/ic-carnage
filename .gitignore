@@ -23,9 +23,3 @@ dist/
 
 # environment variables
 .env
-
-# Unity WebGL build artifacts
-*.data.unityweb
-*.wasm.unityweb
-*.framework.js.unityweb
-*.loader.js
