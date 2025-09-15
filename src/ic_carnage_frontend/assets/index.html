@@ -18,11 +18,6 @@
       const LOCAL_HOST = 'http://localhost:4943';
       const IC_HOST = 'https://icp-api.io';
 
-      // Check if we're in local development
-      const isLocal = window.location.hostname === 'localhost' || window.location.hostname.includes('localhost');
-      const LOCAL_HOST = 'http://localhost:4943';
-      const IC_HOST = 'https://icp-api.io';
-
       // Preload script to fix BigInt conversion issue
       (function() {
         console.log("Applying BigInt patch...");
@@ -59,40 +54,9 @@
             console.log("Not authenticated, but continuing with anonymous access...");
             // Don't auto-login, let user choose
             setupAnonymousAgent();
-            console.log("Not authenticated, but continuing with anonymous access...");
-            // Don't auto-login, let user choose
-            setupAnonymousAgent();
           }
         } catch (error) {
           console.error("Failed to initialize auth:", error);
-          // Fallback to anonymous access
-          setupAnonymousAgent();
-        }
-      }
-
-      // Setup anonymous agent for testing
-      async function setupAnonymousAgent() {
-        console.log("Setting up anonymous agent...");
-        try {
-          icAgent = new HttpAgent({
-            host: isLocal ? LOCAL_HOST : IC_HOST,
-            verifyQuerySignatures: false
-          });
-
-          if (isLocal) {
-            await icAgent.fetchRootKey();
-            console.log("Anonymous agent ready for local development");
-          }
-
-          // Store for global access
-          window.icAgent = icAgent;
-          
-          // Test anonymous call
-          console.log("Testing anonymous backend call...");
-          await testDirectCall();
-          
-        } catch (error) {
-          console.error("Failed to setup anonymous agent:", error);
           // Fallback to anonymous access
           setupAnonymousAgent();
         }
@@ -137,40 +101,12 @@
             identity: identity,
             host: isLocal ? LOCAL_HOST : IC_HOST,
             // CRITICAL: Explicitly disable signature verification
-          console.log("Setting up HttpAgent for local development...");
-          
-          // Create agent with explicit configuration object
-          const agentConfig = {
-            identity: identity,
-            host: isLocal ? LOCAL_HOST : IC_HOST,
-            // CRITICAL: Explicitly disable signature verification
             verifyQuerySignatures: false
           };
           
           console.log("Agent config:", agentConfig);
           icAgent = new HttpAgent(agentConfig);
-          };
-          
-          console.log("Agent config:", agentConfig);
-          icAgent = new HttpAgent(agentConfig);
 
-          // CRITICAL: For local development only
-          if (isLocal) {
-            console.log("Fetching root key for local development...");
-            try {
-              await icAgent.fetchRootKey();
-              console.log("Root key fetched successfully");
-            } catch (error) {
-              console.error("Failed to fetch root key:", error);
-              console.warn("Continuing without root key verification");
-            }
-            
-            // FORCE disable certificate verification for local development
-            console.log("Force disabling certificate verification...");
-            icAgent._verifyQuerySignatures = false;
-            if (icAgent.config) {
-              icAgent.config.verifyQuerySignatures = false;
-            }
           // CRITICAL: For local development only
           if (isLocal) {
             console.log("Fetching root key for local development...");
@@ -218,13 +154,7 @@
 
         console.log("Starting Internet Identity login...");
         
-        
         try {
-          // Try production Internet Identity for more reliable experience
-          const identityProvider = "https://identity.ic0.app";
-
-          console.log("Using PRODUCTION identity provider:", identityProvider);
-
           // Try production Internet Identity for more reliable experience
           const identityProvider = "https://identity.ic0.app";
 
@@ -232,21 +162,14 @@
 
           await authClient.login({
             identityProvider,
-            identityProvider,
             onSuccess: async () => {
-              console.log("Login SUCCESS callback triggered!");
               console.log("Login SUCCESS callback triggered!");
               await handleAuthenticated();
             },
             onError: (error) => {
               console.error("Login ERROR callback triggered:", error);
               alert("Authentication failed: " + (error?.message || error));
-              console.error("Login ERROR callback triggered:", error);
-              alert("Authentication failed: " + (error?.message || error));
             },
-            windowOpenerFeatures: 'width=500,height=600,left=100,top=100',
-            // Add derivationOrigin for local development
-            derivationOrigin: window.location.origin
             windowOpenerFeatures: 'width=500,height=600,left=100,top=100',
             // Add derivationOrigin for local development
             derivationOrigin: window.location.origin
@@ -254,11 +177,7 @@
           
           console.log("authClient.login() call completed");
           
-          
-          console.log("authClient.login() call completed");
-          
         } catch (error) {
-          console.error("Authentication process failed with exception:", error);
           console.error("Authentication process failed with exception:", error);
           alert("Authentication failed. Check console for details: " + error.message);
         }
@@ -272,21 +191,10 @@
           return "uxrrr-q7777-77774-qaaaq-cai";
         }
         return "rdmx6-jaaaa-aaaaa-aaadq-cai"; // Standard production II
-      // Get canister IDs dynamically from the current environment
-      function getInternetIdentityCanisterId() {
-        // For now, let's use the production II for testing
-        if (isLocal) {
-          // Try local first, fallback to production
-          return "uxrrr-q7777-77774-qaaaq-cai";
-        }
-        return "rdmx6-jaaaa-aaaaa-aaadq-cai"; // Standard production II
       }
-
 
       // Get your backend canister ID
       function getBackendCanisterId() {
-        // Use the actual deployed backend canister ID
-        return "uzt4z-lp777-77774-qaabq-cai";
         // Use the actual deployed backend canister ID
         return "uzt4z-lp777-77774-qaabq-cai";
       }
@@ -297,16 +205,12 @@
           'deposit_currency': IDL.Func([IDL.Nat64], [], []),
           'get_balance': IDL.Func([], [IDL.Nat64], []), // Remove 'query' to make it a call
           'reset_balance': IDL.Func([], [], []),
-          'deposit_currency': IDL.Func([IDL.Nat64], [], []),
-          'get_balance': IDL.Func([], [IDL.Nat64], []), // Remove 'query' to make it a call
-          'reset_balance': IDL.Func([], [], []),
         });
       };
 
       // Function to get balance from ICP backend
       window.GetBalanceJS = async function() {
         console.log("GetBalanceJS called from Unity");
-        
         
         if (!isAuthenticated || !icAgent) {
           console.error("Not authenticated, cannot get balance");
@@ -318,42 +222,6 @@
 
         try {
           console.log("Creating actor for backend calls...");
-          console.log("Using canister ID:", getBackendCanisterId());
-          console.log("Using host:", icAgent._host || icAgent.host);
-          console.log("Agent verify signatures:", icAgent._verifyQuerySignatures);
-          
-          // Get identity from authClient
-          const currentIdentity = authClient.getIdentity();
-          console.log("Identity type:", currentIdentity.constructor.name);
-          
-          // For local development, try using anonymous agent if authenticated calls fail
-          let actorAgent = icAgent;
-          if (isLocal) {
-            console.log("Local development - creating failsafe anonymous agent...");
-            const anonymousAgent = new HttpAgent({
-              host: LOCAL_HOST
-            });
-            await anonymousAgent.fetchRootKey();
-            
-            // Create actor with anonymous agent for local testing
-            const anonymousActor = Actor.createActor(backendIdl, {
-              agent: anonymousAgent,
-              canisterId: getBackendCanisterId(),
-            });
-            
-            console.log("Trying anonymous call first for local development...");
-            const balance = await anonymousActor.get_balance();
-            const balanceNumber = Number(balance);
-            
-            console.log("Balance retrieved from ICP (anonymous):", balanceNumber);
-            
-            if (window.unityInstance) {
-              window.unityInstance.SendMessage("PlayerCurrency", "OnBalanceReceived", balanceNumber);
-            }
-            return; // Success with anonymous call
-          }
-          
-          // For production, use authenticated agent
           console.log("Using canister ID:", getBackendCanisterId());
           console.log("Using host:", icAgent._host || icAgent.host);
           console.log("Agent verify signatures:", icAgent._verifyQuerySignatures);
@@ -415,54 +283,45 @@
         }
       };
 
-      // Function to update balance on ICP backend
-      window.UpdateBalanceJS = async function(amount) {
-        console.log("UpdateBalanceJS called from Unity with amount:", amount);
-        if (!isAuthenticated || !icAgent) {
-          console.error("Not authenticated, cannot update balance");
-          return;
-        }
-
-        try {
-          // For local development, use anonymous agent like in GetBalanceJS
-          if (isLocal) {
-            console.log("Local development - using anonymous agent for update...");
-            const anonymousAgent = new HttpAgent({
-              host: LOCAL_HOST
-            });
-            await anonymousAgent.fetchRootKey();
-            
-            const anonymousActor = Actor.createActor(backendIdl, {
-              agent: anonymousAgent,
-              canisterId: getBackendCanisterId(),
-            });
-            
-            console.log("Calling deposit_currency on backend with amount (anonymous):", amount);
-            await anonymousActor.deposit_currency(BigInt(Math.max(0, amount)));
-            console.log("Balance updated successfully on ICP (anonymous)");
-          } else {
-            // For production, use authenticated agent
-            const actor = Actor.createActor(backendIdl, {
-              agent: icAgent,
-              canisterId: getBackendCanisterId(),
-            });
-            
-            console.log("Calling deposit_currency on backend with amount:", amount);
-            await actor.deposit_currency(BigInt(Math.max(0, amount)));
-            console.log("Balance updated successfully on ICP");
+    // Function to update balance on ICP backend
+    window.UpdateBalanceJS = async function(amount) {
+      console.log("UpdateBalanceJS called from Unity with amount:", amount);
+      
+      try {
+        console.log("Local development - using anonymous agent for update...");
+        const anonymousAgent = new HttpAgent({
+          host: LOCAL_HOST
+        });
+        await anonymousAgent.fetchRootKey();
+        
+        const anonymousActor = Actor.createActor(backendIdl, {
+          agent: anonymousAgent,
+          canisterId: getBackendCanisterId(),
+        });
+        
+        console.log("Calling deposit_currency on backend with amount (anonymous):", amount);
+        await anonymousActor.deposit_currency(BigInt(Math.max(0, amount)));
+        console.log("Balance updated successfully on ICP (anonymous)");
+        
+        // After updating, get the new balance
+        setTimeout(() => {
+          if (window.GetBalanceJS) {
+            window.GetBalanceJS();
           }
-          
-          // After updating, get the new balance
-          setTimeout(() => {
-            if (window.GetBalanceJS) {
-              window.GetBalanceJS();
-            }
-          }, 500);
-          
-        } catch (error) {
-          console.error("Failed to update balance on ICP:", error);
-        }
-      };
+        }, 500);
+        
+      } catch (error) {
+        console.error("Failed to update balance on ICP:", error);
+        console.error("Error details:", error.message);
+        // Don't claim success if there was an error
+      }
+    };
+
+    // Test function for Unity-JS bridge
+    window.TestUnityJS = function() {
+      console.log("TestUnityJS called successfully from Unity!");
+      return "success";
+    };
 
       // Manual login trigger (for testing)
       window.triggerLogin = function() {
@@ -481,9 +340,6 @@
           if (window.unityInstance) {
             window.unityInstance.SendMessage("PlayerCurrency", "DisableGameplay");
           }
-          if (window.unityInstance) {
-            window.unityInstance.SendMessage("PlayerCurrency", "DisableGameplay");
-          }
         }
       };
 
@@ -496,31 +352,6 @@
         }
 
         try {
-          // For local development, use anonymous agent
-          if (isLocal) {
-            console.log("Local development - using anonymous agent for reset...");
-            const anonymousAgent = new HttpAgent({
-              host: LOCAL_HOST
-            });
-            await anonymousAgent.fetchRootKey();
-            
-            const anonymousActor = Actor.createActor(backendIdl, {
-              agent: anonymousAgent,
-              canisterId: getBackendCanisterId(),
-            });
-            
-            await anonymousActor.reset_balance();
-            console.log("Balance reset successfully (anonymous)");
-          } else {
-            // For production, use authenticated agent
-            const actor = Actor.createActor(backendIdl, {
-              agent: icAgent,
-              canisterId: getBackendCanisterId(),
-            });
-            
-            await actor.reset_balance();
-            console.log("Balance reset successfully");
-          }
           // For local development, use anonymous agent
           if (isLocal) {
             console.log("Local development - using anonymous agent for reset...");
@@ -629,82 +460,11 @@
         }
       };
 
-      // Manual check for authentication (in case popup doesn't trigger callbacks)
-      window.checkAuthStatus = async function() {
-        console.log("=== Manual Auth Status Check ===");
-        if (!authClient) {
-          console.log("No AuthClient available");
-          return;
-        }
-        
-        try {
-          const isAuth = await authClient.isAuthenticated();
-          console.log("Is authenticated:", isAuth);
-          
-          if (isAuth && !isAuthenticated) {
-            console.log("Found authentication, setting up...");
-            await handleAuthenticated();
-          } else if (!isAuth) {
-            console.log("Not authenticated");
-          } else {
-            console.log("Already set up");
-          }
-        } catch (error) {
-          console.error("Error checking auth status:", error);
-        }
-      };
-
-      // Debug function to check agent status
-      window.debugAgent = function() {
-        console.log("=== Agent Debug Info ===");
-        console.log("isAuthenticated:", isAuthenticated);
-        console.log("userPrincipal:", userPrincipal);
-        console.log("icAgent:", icAgent);
-        if (icAgent) {
-          console.log("Agent host:", icAgent._host || icAgent.host);
-          console.log("Agent identity:", icAgent._identity);
-          console.log("Agent config:", icAgent.config);
-          console.log("Verify signatures (config):", icAgent.config?.verifyQuerySignatures);
-          console.log("Verify signatures (_verifyQuerySignatures):", icAgent._verifyQuerySignatures);
-        }
-        console.log("Environment:", isLocal ? 'Local' : 'Production');
-        console.log("Backend canister ID:", getBackendCanisterId());
-      };
-
-      // Test function with anonymous agent (this should work)
-      window.testDirectCall = async function() {
-        console.log("Testing direct call without authentication...");
-        
-        try {
-          // Create anonymous agent for testing
-          const testAgent = new HttpAgent({
-            host: isLocal ? LOCAL_HOST : IC_HOST
-          });
-          
-          if (isLocal) {
-            await testAgent.fetchRootKey();
-          }
-          
-          const actor = Actor.createActor(backendIdl, {
-            agent: testAgent,
-            canisterId: getBackendCanisterId(),
-          });
-          
-          console.log("Calling get_balance with anonymous agent...");
-          const balance = await actor.get_balance();
-          console.log("Anonymous balance call result:", Number(balance));
-          
-        } catch (error) {
-          console.error("Anonymous call failed:", error);
-        }
-      };
-
       // Load the bundled auth client
       function loadAuthClient() {
         console.log("Loading auth-client.bundle.js...");
         
         const script = document.createElement('script');
-        script.src = './auth-client.bundle.js';
         script.src = './auth-client.bundle.js';
         script.onload = function() {
           console.log("Auth client loaded successfully");
@@ -728,14 +488,9 @@
           console.log("All required globals loaded successfully");
           console.log("Environment:", isLocal ? 'Local Development' : 'Production');
           
-          console.log("All required globals loaded successfully");
-          console.log("Environment:", isLocal ? 'Local Development' : 'Production');
-          
           // Wait a moment for everything to initialize
           setTimeout(initializeAuth, 100);
         };
-        script.onerror = function(e) {
-          console.error("Failed to load auth-client.bundle.js", e);
         script.onerror = function(e) {
           console.error("Failed to load auth-client.bundle.js", e);
         };
@@ -765,17 +520,12 @@
         <div id="unity-fullscreen-button"></div>
         <div id="unity-build-title">IC Carnage</div>
         <!-- Debug buttons for testing -->
-        <!-- Debug buttons for testing -->
         <div style="margin-top: 10px;">
           <button onclick="triggerLogin()" style="margin: 5px;">Login</button>
           <button onclick="logout()" style="margin: 5px;">Logout</button>
           <button onclick="checkAuthStatus()" style="margin: 5px;">Check Auth Status</button>
-          <button onclick="checkAuthStatus()" style="margin: 5px;">Check Auth Status</button>
           <button onclick="GetBalanceJS()" style="margin: 5px;">Get Balance</button>
           <button onclick="UpdateBalanceJS(100)" style="margin: 5px;">Add 100 Currency</button>
-          <button onclick="testDirectCall()" style="margin: 5px;">Test Anonymous Call</button>
-          <button onclick="resetBalance()" style="margin: 5px;">Reset Balance</button>
-          <button onclick="debugAgent()" style="margin: 5px;">Debug Agent</button>
           <button onclick="testDirectCall()" style="margin: 5px;">Test Anonymous Call</button>
           <button onclick="resetBalance()" style="margin: 5px;">Reset Balance</button>
           <button onclick="debugAgent()" style="margin: 5px;">Debug Agent</button>
@@ -849,7 +599,6 @@
           unityInstance.SendMessage("PlayerCurrency", "DisableGameplay");
 
           // If already authenticated, enable the game
-          // If already authenticated, enable the game
           if (isAuthenticated) {
             unityInstance.SendMessage("PlayerCurrency", "OnAuthenticated");
             unityInstance.SendMessage("PlayerCurrency", "EnableGameplay");
@@ -859,10 +608,6 @@
           console.error("Unity load error:", message);
           unityShowBanner("Unity failed to load: " + message, "error");
         });
-      };
-      script.onerror = (error) => {
-        console.error("Failed to load Unity loader:", error);
-        unityShowBanner("Failed to load Unity loader script", "error");
       };
       script.onerror = (error) => {
         console.error("Failed to load Unity loader:", error);
