@@ -4,11 +4,36 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
 use ic_stable_structures::storable::Bound;
 use ic_cdk::api::call::call;
 use std::{borrow::Cow, cell::RefCell};
+use num_traits::ToPrimitive;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 const MAX_VALUE_SIZE: u32 = 5000;
-const CRNG_LEDGER_CANISTER: &str = "uxrrr-q7777-77774-qaaaq-cai";
+const CRNG_LEDGER_CANISTER: &str = "umunu-kh777-77774-qaaca-cai";
+//const CRNG_PER_ICP_RATE: u64 = 400000000; // 4 CRNG per ICP (with 8 decimals)
+
+#[derive(CandidType, Deserialize)]
+struct TransferArgs {
+    to: Account,
+    amount: candid::Nat,
+    fee: Option<candid::Nat>,
+    memo: Option<Vec<u8>>,
+    from_subaccount: Option<Vec<u8>>,
+    created_at_time: Option<u64>,
+}
+
+
+#[derive(CandidType, Deserialize, Debug)]
+enum TransferError {
+    BadFee { expected_fee: candid::Nat },
+    BadBurn { min_burn_amount: candid::Nat },
+    InsufficientFunds { balance: candid::Nat },
+    TooOld,
+    CreatedInFuture { ledger_time: u64 },
+    Duplicate { duplicate_of: candid::Nat },
+    TemporarilyUnavailable,
+    GenericError { error_code: candid::Nat, message: String },
+}
 
 #[derive(CandidType, Deserialize)]
 struct UserBalance {
@@ -99,39 +124,42 @@ fn reset_balance() {
     });
 }
 
-// New CRNG token functions
 #[ic_cdk::update]
-async fn mint_crng_tokens(to_principal: String, amount: u64) -> Result<u64, String> {
-    // Only allow minting from this canister (admin function)
-    let caller = ic_cdk::caller();
-    let this_canister = ic_cdk::id();
-    
-    if caller != this_canister {
-        return Err("Unauthorized: Only this canister can mint tokens".to_string());
-    }
-
+async fn mint_crng_for_user(user_principal: String, crng_amount: u64) -> Result<u64, String> {
     let ledger_id = Principal::from_text(CRNG_LEDGER_CANISTER)
         .map_err(|e| format!("Invalid ledger canister ID: {}", e))?;
     
-    let to = Principal::from_text(to_principal)
-        .map_err(|e| format!("Invalid recipient principal: {}", e))?;
-    
-    let mint_args = (
-        Account {
-            owner: to,
+    let user = Principal::from_text(user_principal)
+        .map_err(|e| format!("Invalid user principal: {}", e))?;
+
+    // Create transfer args (mint by transferring from minting account)
+    let transfer_args = TransferArgs {
+        to: Account {
+            owner: user,
             subaccount: None,
         },
-        amount,
-    );
+        amount: candid::Nat::from(crng_amount),
+        fee: None,
+        memo: None,
+        from_subaccount: None,
+        created_at_time: None,
+    };
 
-    let (result,): (Result<u64, String>,) = call(ledger_id, "icrc1_mint", mint_args)
+    // Call the ICRC-1 transfer function (mints tokens)
+    let (result,): (Result<candid::Nat, TransferError>,) = call(ledger_id, "icrc1_transfer", (transfer_args,))
         .await
-        .map_err(|e| format!("Mint call failed: {:?}", e))?;
-    
-    result.map_err(|e| format!("Mint failed: {}", e))
+        .map_err(|e| format!("Transfer call failed: {:?}", e))?;
+
+    match result {
+        Ok(block_index) => {
+            // Convert candid::Nat to u64
+            Ok(block_index.0.to_u64().unwrap_or(0))
+        },
+        Err(e) => Err(format!("Transfer failed: {:?}", e))
+    }
 }
 
-#[ic_cdk::query]
+#[ic_cdk::update]
 async fn get_crng_balance(user_principal: String) -> Result<u64, String> {
     let ledger_id = Principal::from_text(CRNG_LEDGER_CANISTER)
         .map_err(|e| format!("Invalid ledger canister ID: {}", e))?;
@@ -144,9 +172,9 @@ async fn get_crng_balance(user_principal: String) -> Result<u64, String> {
         subaccount: None,
     };
 
-    let (balance,): (u64,) = call(ledger_id, "icrc1_balance_of", (balance_args,))
+    let (balance,): (candid::Nat,) = call(ledger_id, "icrc1_balance_of", (balance_args,))
         .await
         .map_err(|e| format!("Balance check failed: {:?}", e))?;
     
-    Ok(balance)
+    balance.0.to_u64().ok_or_else(|| "Balance too large to convert to u64".to_string())
 }

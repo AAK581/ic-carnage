@@ -2,4 +2,6 @@ service : {
     "deposit_currency" : (nat64) -> ();
     "get_balance" : () -> (nat64) query;
     "reset_balance" : () -> ();
+    "mint_crng_for_user" : (text, nat64) -> (variant { Ok : nat64; Err : text });
+    "get_crng_balance" : (text) -> (variant { Ok : nat64; Err : text });
 }
