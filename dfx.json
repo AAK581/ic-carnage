@@ -27,6 +27,11 @@
           "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
         }
       }
+    },
+    "icrc1_ledger_canister": {
+      "type": "custom",
+      "candid": "https://raw.githubusercontent.com/dfinity/ic/c25143850963143c9ee6bec77fe8ccf8306a4949/rs/ledger_suite/icrc1/ledger/ledger.did",
+      "wasm": "https://download.dfinity.systems/ic/c25143850963143c9ee6bec77fe8ccf8306a4949/canisters/ic-icrc1-ledger.wasm.gz"
     }
   },
   "networks": {
