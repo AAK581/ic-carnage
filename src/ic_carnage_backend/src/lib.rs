@@ -5,12 +5,14 @@ use ic_stable_structures::storable::Bound;
 use ic_cdk::api::call::call;
 use std::{borrow::Cow, cell::RefCell};
 use num_traits::ToPrimitive;
+use ic_ledger_types::{AccountIdentifier, Tokens, DEFAULT_SUBACCOUNT};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 const MAX_VALUE_SIZE: u32 = 5000;
-const CRNG_LEDGER_CANISTER: &str = "umunu-kh777-77774-qaaca-cai";
-//const CRNG_PER_ICP_RATE: u64 = 400000000; // 4 CRNG per ICP (with 8 decimals)
+const CRNG_LEDGER_CANISTER: &str = "uxrrr-q7777-77774-qaaaq-cai";
+const ICP_LEDGER_CANISTER: &str = "umunu-kh777-77774-qaaca-cai";
+const CRNG_PER_ICP: u64 = 400000000; // 4 CRNG per ICP (both use 8 decimals)
 
 #[derive(CandidType, Deserialize)]
 struct TransferArgs {
@@ -21,7 +23,6 @@ struct TransferArgs {
     from_subaccount: Option<Vec<u8>>,
     created_at_time: Option<u64>,
 }
-
 
 #[derive(CandidType, Deserialize, Debug)]
 enum TransferError {
@@ -50,9 +51,6 @@ impl Storable for UserBalance {
         Decode!(bytes.as_ref(), Self).unwrap()
     }
 
-    fn into_bytes(self) -> Vec<u8> {
-        Encode!(&self).unwrap()
-    }
 
     const BOUND: Bound = Bound::Bounded {
         max_size: MAX_VALUE_SIZE,
@@ -177,4 +175,23 @@ async fn get_crng_balance(user_principal: String) -> Result<u64, String> {
         .map_err(|e| format!("Balance check failed: {:?}", e))?;
     
     balance.0.to_u64().ok_or_else(|| "Balance too large to convert to u64".to_string())
+}
+
+// NEW: Customer calls this after sending ICP to purchase CRNG
+#[ic_cdk::update] 
+async fn purchase_crng_with_icp(expected_icp_amount: u64) -> Result<u64, String> {
+    let customer_principal = ic_cdk::caller().to_string();
+    
+    ic_cdk::println!("Customer {} requesting CRNG for {} ICP", 
+        customer_principal, expected_icp_amount);
+    
+    // Calculate CRNG to mint (1 ICP = 4 CRNG, both use 8 decimals)
+    let crng_amount = expected_icp_amount * 4; // 4 CRNG per 1 ICP
+    
+    // Mint CRNG to customer
+    let block_index = mint_crng_for_user(customer_principal, crng_amount).await?;
+    
+    ic_cdk::println!("Minted {} CRNG units (block {})", crng_amount, block_index);
+    
+    Ok(crng_amount)
 }

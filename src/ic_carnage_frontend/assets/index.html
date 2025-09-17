@@ -18,6 +18,10 @@
       const LOCAL_HOST = 'http://localhost:4943';
       const IC_HOST = 'https://icp-api.io';
 
+      // Add CRNG constants
+      const CRNG_LEDGER_CANISTER = "uxrrr-q7777-77774-qaaaq-cai";
+      const ICP_LEDGER_CANISTER = "umunu-kh777-77774-qaaca-cai";
+
       // Preload script to fix BigInt conversion issue
       (function() {
         console.log("Applying BigInt patch...");
@@ -199,12 +203,15 @@
         return "uzt4z-lp777-77774-qaabq-cai";
       }
 
-      // Create the Candid interface for your backend
+      // Extended Candid interface for your backend
       const backendIdl = ({ IDL }) => {
         return IDL.Service({
           'deposit_currency': IDL.Func([IDL.Nat64], [], []),
-          'get_balance': IDL.Func([], [IDL.Nat64], []), // Remove 'query' to make it a call
+          'get_balance': IDL.Func([], [IDL.Nat64], []),
           'reset_balance': IDL.Func([], [], []),
+          'purchase_crng_with_icp': IDL.Func([IDL.Nat64], [IDL.Variant({ 'Ok': IDL.Nat64, 'Err': IDL.Text })], []),
+          'get_crng_balance': IDL.Func([IDL.Text], [IDL.Variant({ 'Ok': IDL.Nat64, 'Err': IDL.Text })], []),
+          'mint_crng_for_user': IDL.Func([IDL.Text, IDL.Nat64], [IDL.Variant({ 'Ok': IDL.Nat64, 'Err': IDL.Text })], []),
         });
       };
 
@@ -283,45 +290,182 @@
         }
       };
 
-    // Function to update balance on ICP backend
-    window.UpdateBalanceJS = async function(amount) {
-      console.log("UpdateBalanceJS called from Unity with amount:", amount);
-      
-      try {
-        console.log("Local development - using anonymous agent for update...");
-        const anonymousAgent = new HttpAgent({
-          host: LOCAL_HOST
-        });
-        await anonymousAgent.fetchRootKey();
+      // Function to update balance on ICP backend
+      window.UpdateBalanceJS = async function(amount) {
+        console.log("UpdateBalanceJS called from Unity with amount:", amount);
         
-        const anonymousActor = Actor.createActor(backendIdl, {
-          agent: anonymousAgent,
+        try {
+          console.log("Local development - using anonymous agent for update...");
+          const anonymousAgent = new HttpAgent({
+            host: LOCAL_HOST
+          });
+          await anonymousAgent.fetchRootKey();
+          
+          const anonymousActor = Actor.createActor(backendIdl, {
+            agent: anonymousAgent,
+            canisterId: getBackendCanisterId(),
+          });
+          
+          console.log("Calling deposit_currency on backend with amount (anonymous):", amount);
+          await anonymousActor.deposit_currency(BigInt(Math.max(0, amount)));
+          console.log("Balance updated successfully on ICP (anonymous)");
+          
+          // After updating, get the new balance
+          setTimeout(() => {
+            if (window.GetBalanceJS) {
+              window.GetBalanceJS();
+            }
+          }, 500);
+          
+        } catch (error) {
+          console.error("Failed to update balance on ICP:", error);
+          console.error("Error details:", error.message);
+          // Don't claim success if there was an error
+        }
+      };
+
+      window.testCRNGPurchase = async function() {
+        console.log("Testing CRNG purchase flow...");
+        
+        if (!isAuthenticated || !userPrincipal || !icAgent) {
+          alert("Please login first to purchase CRNG");
+          console.log("Not authenticated. Please click 'Login' first.");
+          return;
+        }
+
+        try {
+          console.log("Using authenticated agent for purchase...");
+          console.log("Authenticated as:", userPrincipal);
+          
+          const authenticatedActor = Actor.createActor(backendIdl, {
+            agent: icAgent,
+            canisterId: getBackendCanisterId(),
+          });
+          
+          console.log("Calling purchase_crng_with_icp with 125000000 e8s (1.25 ICP)...");
+          const result = await authenticatedActor.purchase_crng_with_icp(BigInt(125000000));
+          
+          if (result.Ok) {
+            const crngAmount = Number(result.Ok);
+            console.log(`Successfully purchased ${crngAmount / 100000000} CRNG tokens`);
+            alert(`Success! Purchased ${crngAmount / 100000000} CRNG tokens for ${userPrincipal}`);
+          } else {
+            console.error("Purchase failed:", result.Err);
+            alert(`Purchase failed: ${result.Err}`);
+          }
+          
+        } catch (error) {
+          console.error("CRNG purchase test failed:", error);
+          
+          // Fallback to anonymous agent for local development
+          if (isLocal) {
+            console.log("Trying anonymous agent as fallback...");
+            try {
+              const anonymousAgent = new HttpAgent({
+                host: LOCAL_HOST
+              });
+              await anonymousAgent.fetchRootKey();
+              
+              const anonymousActor = Actor.createActor(backendIdl, {
+                agent: anonymousAgent,
+                canisterId: getBackendCanisterId(),
+              });
+              
+              const result = await anonymousActor.purchase_crng_with_icp(BigInt(125000000));
+              
+              if (result.Ok) {
+                const crngAmount = Number(result.Ok);
+                alert(`Success (anonymous)! Purchased ${crngAmount / 100000000} CRNG tokens`);
+              } else {
+                alert(`Purchase failed: ${result.Err}`);
+              }
+              
+            } catch (fallbackError) {
+              alert(`Both authenticated and anonymous purchase failed: ${fallbackError.message}`);
+            }
+          } else {
+            alert(`Test failed: ${error.message}`);
+          }
+        }
+      };
+
+     window.getCRNGBalance = async function() {
+  console.log("Getting CRNG balance...");
+  
+  if (!isAuthenticated || !userPrincipal || !icAgent) {
+    alert("Please login first to check CRNG balance");
+    return;
+  }
+
+  try {
+    const authenticatedActor = Actor.createActor(backendIdl, {
+      agent: icAgent,
+      canisterId: getBackendCanisterId(),
+    });
+    
+    console.log("Checking CRNG balance for authenticated user:", userPrincipal);
+    const result = await authenticatedActor.get_crng_balance(userPrincipal);
+    
+    if (result.Ok) {
+      const balance = Number(result.Ok);
+      console.log(`CRNG balance: ${balance / 100000000} tokens`);
+      alert(`Your CRNG Balance: ${balance / 100000000} tokens`);
+    } else {
+      console.error("Balance check failed:", result.Err);
+      alert(`Balance check failed: ${result.Err}`);
+    }
+    
+  } catch (error) {
+    console.error("Failed to get CRNG balance:", error);
+    
+    // Since purchases are falling back to anonymous, let's check anonymous balance too
+    if (isLocal) {
+      console.log("Trying to check balance with anonymous agent...");
+      alert("Authenticated balance check failed. The tokens might be associated with the anonymous caller due to local development issues. Check console for details.");
+    } else {
+      alert(`Failed to get balance: ${error.message}`);
+    }
+  }
+};
+      // Convenience purchase functions
+      window.buyLegendarySkin = async function() {
+        console.log("Buying legendary skin (5 CRNG = 1.25 ICP)");
+        await testCRNGPurchase();
+      };
+
+    window.buyRareSkin = async function() {
+      console.log("Buying rare skin (1 CRNG = 0.25 ICP)");
+      
+      if (!isAuthenticated || !userPrincipal || !icAgent) {
+        alert("Please login first to purchase CRNG");
+        return;
+      }
+
+      try {
+        const authenticatedActor = Actor.createActor(backendIdl, {
+          agent: icAgent,
           canisterId: getBackendCanisterId(),
         });
         
-        console.log("Calling deposit_currency on backend with amount (anonymous):", amount);
-        await anonymousActor.deposit_currency(BigInt(Math.max(0, amount)));
-        console.log("Balance updated successfully on ICP (anonymous)");
+        const result = await authenticatedActor.purchase_crng_with_icp(BigInt(25000000)); // 0.25 ICP
         
-        // After updating, get the new balance
-        setTimeout(() => {
-          if (window.GetBalanceJS) {
-            window.GetBalanceJS();
-          }
-        }, 500);
-        
+        if (result.Ok) {
+          const crngAmount = Number(result.Ok);
+          alert(`Success! Purchased ${crngAmount / 100000000} CRNG for rare skin`);
+        } else {
+          alert(`Purchase failed: ${result.Err}`);
+        }
       } catch (error) {
-        console.error("Failed to update balance on ICP:", error);
-        console.error("Error details:", error.message);
-        // Don't claim success if there was an error
+        console.error("Rare skin purchase failed:", error);
+        alert(`Purchase failed: ${error.message}`);
       }
     };
 
-    // Test function for Unity-JS bridge
-    window.TestUnityJS = function() {
-      console.log("TestUnityJS called successfully from Unity!");
-      return "success";
-    };
+      // Test function for Unity-JS bridge
+      window.TestUnityJS = function() {
+        console.log("TestUnityJS called successfully from Unity!");
+        return "success";
+      };
 
       // Manual login trigger (for testing)
       window.triggerLogin = function() {
@@ -529,6 +673,11 @@
           <button onclick="testDirectCall()" style="margin: 5px;">Test Anonymous Call</button>
           <button onclick="resetBalance()" style="margin: 5px;">Reset Balance</button>
           <button onclick="debugAgent()" style="margin: 5px;">Debug Agent</button>
+          <!-- CRNG Purchase Test Buttons -->
+          <button onclick="testCRNGPurchase()" style="margin: 5px; background-color: #4CAF50; color: white;">Test CRNG Purchase (1.25 ICP → 5 CRNG)</button>
+          <button onclick="getCRNGBalance()" style="margin: 5px; background-color: #2196F3; color: white;">Check CRNG Balance</button>
+          <button onclick="buyLegendarySkin()" style="margin: 5px; background-color: #ff9800; color: white;">Buy Legendary Skin (5 CRNG)</button>
+          <button onclick="buyRareSkin()" style="margin: 5px; background-color: #9c27b0; color: white;">Buy Rare Skin (1 CRNG)</button>
         </div>
       </div>
     </div>
