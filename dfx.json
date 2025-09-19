@@ -42,6 +42,10 @@
           "ic": "ryjl3-tyaaa-aaaaa-aaaba-cai"
         }
       }
+    },
+    "nft_skins": {
+      "main": "icrc_nft.mo/example/main.mo",
+      "type": "motoko"
     }
   },
   "networks": {
@@ -53,7 +57,7 @@
   "defaults": {
     "build": {
       "args": "",
-      "packtool": ""
+      "packtool": "mops sources"
     }
   },
   "output_env_file": ".env",
