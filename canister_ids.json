@@ -2,7 +2,13 @@
   "ic_carnage_backend": {
     "ic": "hmpkt-dyaaa-aaaai-atlsq-cai"
   },
+  "ic_carnage_frontend": {
+    "ic": "gbbo5-mqaaa-aaaai-atlva-cai"
+  },
   "icrc1_ledger_canister": {
     "ic": "hfmbp-vqaaa-aaaai-atlta-cai"
+  },
+  "nft_skins": {
+    "ic": "gicfb-2yaaa-aaaai-atluq-cai"
   }
 }

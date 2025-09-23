@@ -10,7 +10,7 @@ use ic_ledger_types::{AccountIdentifier, Tokens, DEFAULT_SUBACCOUNT};
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 const MAX_VALUE_SIZE: u32 = 5000;
-const CRNG_LEDGER_CANISTER: &str = "uxrrr-q7777-77774-qaaaq-cai";
+const CRNG_LEDGER_CANISTER: &str = "a4gq6-oaaaa-aaaab-qaa4q";
 const ICP_LEDGER_CANISTER: &str = "umunu-kh777-77774-qaaca-cai";
 const CRNG_PER_ICP: u64 = 400000000; // 4 CRNG per ICP (both use 8 decimals)
 
